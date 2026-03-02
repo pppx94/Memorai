@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="theme-color" content="#0a0a0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MemoryAI — Tu historia, en vídeo</title>
+<link rel="manifest" href="manifest.json">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface2: #1a1a25;
+    --border: rgba(255,255,255,0.07);
+    --gold: #c9a84c;
+    --gold-dim: rgba(201,168,76,0.15);
+    --gold-glow: rgba(201,168,76,0.4);
+    --white: #f0ede8;
+    --muted: rgba(240,237,232,0.4);
+    --accent: #7c6fff;
+    --danger: #ff4d6d;
+    --radius: 16px;
+    --font-display: 'Cormorant Garamond', serif;
+    --font-mono: 'DM Mono', monospace;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+
+  html, body {
+    background: var(--bg);
+    color: var(--white);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* NOISE OVERLAY */
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events:none; z-index:9999; opacity:0.6;
+  }
+
+  /* SCREENS */
+  .screen { display:none; min-height:100vh; flex-direction:column; }
+  .screen.active { display:flex; }
+
+  /* ═══════════════════ SPLASH ═══════════════════ */
+  #splash {
+    align-items:center; justify-content:center;
+    background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(201,168,76,0.08) 0%, transparent 70%),
+                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(124,111,255,0.06) 0%, transparent 60%),
+                var(--bg);
+    text-align:center; padding:40px 24px;
+    animation: fadeIn 0.8s ease;
+  }
+
+  .logo-mark {
+    width:72px; height:72px;
+    border: 1px solid var(--gold);
+    border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    margin: 0 auto 32px;
+    position:relative;
+    box-shadow: 0 0 40px var(--gold-glow), inset 0 0 20px rgba(201,168,76,0.05);
+    animation: pulse-ring 3s infinite;
+  }
+
+  .logo-mark svg { width:32px; height:32px; }
+
+  @keyframes pulse-ring {
+    0%,100% { box-shadow: 0 0 30px var(--gold-glow), inset 0 0 15px rgba(201,168,76,0.05); }
+    50% { box-shadow: 0 0 60px var(--gold-glow), inset 0 0 25px rgba(201,168,76,0.1); }
+  }
+
+  h1.brand {
+    font-family: var(--font-display);
+    font-size: 48px;
+    font-weight: 300;
+    letter-spacing: 0.08em;
+    color: var(--white);
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+
+  .brand-sub {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: var(--gold);
+    text-transform: uppercase;
+    margin-bottom: 48px;
+  }
+
+  .splash-tagline {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 20px;
+    color: var(--muted);
+    margin-bottom: 64px;
+    line-height: 1.5;
+    max-width: 280px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  /* CHAT INPUT — MAIN UI */
+  .chat-wrap {
+    width: 100%;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+
+  .chat-label {
+    font-size: 10px;
+    letter-spacing: 0.25em;
+    color: var(--muted);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    text-align:left;
+  }
+
+  .chat-input-row {
+    display:flex; gap:10px; align-items:center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 6px 6px 6px 20px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .chat-input-row:focus-within {
+    border-color: rgba(201,168,76,0.4);
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.08);
+  }
+
+  .chat-input-row input {
+    flex:1; background:transparent; border:none; outline:none;
+    color: var(--white); font-family: var(--font-mono);
+    font-size: 14px; font-weight:300;
+  }
+
+  .chat-input-row input::placeholder { color: var(--muted); }
+
+  .btn-send {
+    width:40px; height:40px; border-radius:50%;
+    background: linear-gradient(135deg, var(--gold), #a07830);
+    border:none; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    flex-shrink:0; transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .btn-send:hover { transform:scale(1.08); box-shadow:0 4px 20px var(--gold-glow); }
+  .btn-send svg { width:16px; height:16px; }
+
+  .divider {
+    display:flex; align-items:center; gap:12px;
+    margin: 32px 0;
+    max-width: 420px;
+    margin-left:auto; margin-right:auto;
+  }
+  .divider span { font-size:10px; color:var(--muted); letter-spacing:0.2em; white-space:nowrap; }
+  .divider::before, .divider::after {
+    content:''; flex:1; height:1px; background:var(--border);
+  }
+
+  .btn-google {
+    display:flex; align-items:center; justify-content:center; gap:12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 50px;
+    padding: 14px 24px;
+    color: var(--white);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    cursor:pointer;
+    width:100%; max-width:420px;
+    transition: all 0.3s;
+    letter-spacing:0.05em;
+  }
+  .btn-google:hover {
+    background: var(--surface2);
+    border-color: rgba(255,255,255,0.15);
+    transform: translateY(-1px);
+  }
+
+  /* ═══════════════════ CONNECTING ═══════════════════ */
+  #connecting {
+    align-items:center; justify-content:center; gap:24px;
+    background: var(--bg);
+  }
+
+  .connecting-ring {
+    width:80px; height:80px;
+    border: 1px solid var(--border);
+    border-top-color: var(--gold);
+    border-radius:50%;
+    animation: spin 1.2s linear infinite;
+  }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  .connecting-text {
+    font-size:11px; letter-spacing:0.3em;
+    color: var(--muted); text-transform:uppercase;
+    animation: blink 2s infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* ═══════════════════ MAIN APP ═══════════════════ */
+  #app {
+    flex-direction: column;
+    background: radial-gradient(ellipse 100% 40% at 50% 0%, rgba(201,168,76,0.04) 0%, transparent 60%), var(--bg);
+  }
+
+  .topbar {
+    display:flex; align-items:center; justify-content:space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    position:sticky; top:0; z-index:100;
+    background: rgba(10,10,15,0.9);
+    backdrop-filter: blur(20px);
+  }
+
+  .topbar-logo {
+    font-family: var(--font-display);
+    font-size: 22px; font-weight:300;
+    letter-spacing:0.05em;
+  }
+
+  .topbar-logo span { color: var(--gold); }
+
+  .user-avatar {
+    width:34px; height:34px; border-radius:50%;
+    background: linear-gradient(135deg, var(--gold-dim), var(--surface2));
+    border: 1px solid var(--gold);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; cursor:pointer;
+  }
+
+  /* AI CHAT AREA */
+  .chat-area {
+    flex:1; overflow-y:auto; padding:20px;
+    display:flex; flex-direction:column; gap:16px;
+    scroll-behavior:smooth;
+  }
+
+  .msg {
+    max-width:85%; animation: slideUp 0.3s ease;
+  }
+
+  .msg.ai { align-self:flex-start; }
+  .msg.user { align-self:flex-end; }
+
+  @keyframes slideUp {
+    from { opacity:0; transform:translateY(10px); }
+    to { opacity:1; transform:translateY(0); }
+  }
+
+  .msg-bubble {
+    padding:12px 16px; border-radius:18px;
+    font-size:13px; line-height:1.6; font-weight:300;
+  }
+
+  .msg.ai .msg-bubble {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-bottom-left-radius:4px;
+    color: var(--white);
+  }
+
+  .msg.user .msg-bubble {
+    background: linear-gradient(135deg, rgba(201,168,76,0.2), rgba(201,168,76,0.08));
+    border: 1px solid rgba(201,168,76,0.3);
+    border-bottom-right-radius:4px;
+    color: var(--white);
+  }
+
+  .msg-label {
+    font-size:9px; letter-spacing:0.2em; color:var(--muted);
+    text-transform:uppercase; margin-bottom:4px; padding:0 4px;
+  }
+
+  /* FACE CARDS */
+  .faces-grid {
+    display:grid; grid-template-columns: repeat(3,1fr); gap:8px;
+    margin-top:8px;
+  }
+
+  .face-card {
+    aspect-ratio:1; border-radius:12px; overflow:hidden;
+    border: 2px solid transparent;
+    cursor:pointer; position:relative;
+    transition: all 0.25s;
+    background: var(--surface2);
+  }
+
+  .face-card.selected {
+    border-color: var(--gold);
+    box-shadow: 0 0 16px var(--gold-glow);
+  }
+
+  .face-card img {
+    width:100%; height:100%; object-fit:cover;
+    transition: transform 0.3s;
+  }
+
+  .face-card:hover img { transform:scale(1.05); }
+
+  .face-card .face-check {
+    position:absolute; top:6px; right:6px;
+    width:20px; height:20px; border-radius:50%;
+    background: var(--gold);
+    display:none; align-items:center; justify-content:center;
+    font-size:10px;
+  }
+
+  .face-card.selected .face-check { display:flex; }
+
+  .face-card .face-label {
+    position:absolute; bottom:0; left:0; right:0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    padding:16px 6px 6px;
+    font-size:9px; letter-spacing:0.1em; color:var(--white);
+    text-align:center;
+  }
+
+  /* ACTION CHIPS */
+  .chips {
+    display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;
+  }
+
+  .chip {
+    padding:8px 14px; border-radius:50px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: var(--font-mono);
+    font-size:11px; color:var(--white);
+    cursor:pointer; transition:all 0.2s;
+    letter-spacing:0.05em;
+  }
+
+  .chip:hover, .chip.active {
+    border-color: var(--gold);
+    color: var(--gold);
+    background: var(--gold-dim);
+  }
+
+  /* PROGRESS */
+  .progress-wrap {
+    margin-top:10px;
+  }
+
+  .progress-bar {
+    height:2px; background:var(--border); border-radius:2px; overflow:hidden;
+  }
+
+  .progress-fill {
+    height:100%; background: linear-gradient(90deg, var(--gold), var(--accent));
+    border-radius:2px; width:0%;
+    transition: width 0.3s ease;
+  }
+
+  .progress-label {
+    font-size:9px; color:var(--muted); letter-spacing:0.15em;
+    text-transform:uppercase; margin-top:6px;
+  }
+
+  /* VIDEO PREVIEW */
+  .video-preview-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow:hidden; margin-top:8px;
+  }
+
+  .video-canvas-wrap {
+    position:relative; aspect-ratio:9/16; background:#000;
+    overflow:hidden;
+  }
+
+  #slideCanvas {
+    width:100%; height:100%; object-fit:cover;
+  }
+
+  .video-controls {
+    padding:12px 16px;
+    display:flex; gap:10px; align-items:center;
+  }
+
+  .btn-play {
+    width:40px; height:40px; border-radius:50%;
+    background: var(--gold);
+    border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    flex-shrink:0;
+    transition: transform 0.2s;
+  }
+  .btn-play:hover { transform:scale(1.1); }
+
+  .video-info { flex:1; }
+  .video-title { font-size:12px; color:var(--white); margin-bottom:2px; }
+  .video-meta { font-size:9px; color:var(--muted); letter-spacing:0.1em; }
+
+  .btn-download {
+    padding:8px 16px; border-radius:50px;
+    background: linear-gradient(135deg, var(--gold), #a07830);
+    border:none; color:#000; font-family:var(--font-mono);
+    font-size:11px; font-weight:400; cursor:pointer; letter-spacing:0.05em;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .btn-download:hover { transform:scale(1.03); box-shadow: 0 4px 20px var(--gold-glow); }
+
+  /* BOTTOM INPUT */
+  .bottom-input {
+    padding:16px 20px;
+    border-top: 1px solid var(--border);
+    background: rgba(10,10,15,0.95);
+    backdrop-filter:blur(20px);
+    position:sticky; bottom:0;
+  }
+
+  .bottom-row {
+    display:flex; gap:10px; align-items:center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius:50px;
+    padding:8px 8px 8px 20px;
+    transition: border-color 0.3s;
+  }
+
+  .bottom-row:focus-within {
+    border-color: rgba(201,168,76,0.4);
+  }
+
+  .bottom-row input {
+    flex:1; background:transparent; border:none; outline:none;
+    color:var(--white); font-family:var(--font-mono);
+    font-size:13px; font-weight:300;
+  }
+  .bottom-row input::placeholder { color:var(--muted); }
+
+  /* TYPING INDICATOR */
+  .typing { display:flex; gap:4px; padding:4px 0; }
+  .typing span {
+    width:5px; height:5px; border-radius:50%; background:var(--muted);
+    animation: bounce 1.2s infinite;
+  }
+  .typing span:nth-child(2) { animation-delay:0.2s; }
+  .typing span:nth-child(3) { animation-delay:0.4s; }
+  @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+  /* PHOTO STRIP */
+  .photo-strip {
+    display:flex; gap:6px; overflow-x:auto; margin-top:10px;
+    padding-bottom:4px; scrollbar-width:none;
+  }
+  .photo-strip::-webkit-scrollbar { display:none; }
+
+  .photo-thumb {
+    flex-shrink:0; width:56px; height:56px; border-radius:8px;
+    overflow:hidden; border:1px solid var(--border);
+  }
+  .photo-thumb img { width:100%; height:100%; object-fit:cover; }
+
+  /* PHOTO COUNT BADGE */
+  .badge {
+    display:inline-block; padding:2px 8px; border-radius:50px;
+    background: var(--gold-dim); border:1px solid rgba(201,168,76,0.3);
+    color:var(--gold); font-size:10px; letter-spacing:0.1em;
+    margin-left:6px;
+  }
+
+  /* UTILITIES */
+  @keyframes fadeIn { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+  .shimmer {
+    background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+    background-size:200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  .hidden { display:none !important; }
+
+  /* DEMO FACE DATA */
+  .demo-notice {
+    background: rgba(124,111,255,0.08);
+    border:1px solid rgba(124,111,255,0.2);
+    border-radius:12px; padding:10px 14px; margin-top:8px;
+    font-size:10px; color:rgba(124,111,255,0.8); letter-spacing:0.05em;
+    line-height:1.5;
+  }
+
+  /* MUSIC SELECTOR */
+  .music-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px;
+  }
+  .music-card {
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:12px; padding:12px;
+    cursor:pointer; transition:all 0.2s;
+    display:flex; flex-direction:column; gap:4px;
+  }
+  .music-card:hover, .music-card.selected {
+    border-color:var(--gold); background:var(--gold-dim);
+  }
+  .music-icon { font-size:20px; }
+  .music-name { font-size:11px; color:var(--white); letter-spacing:0.05em; }
+  .music-desc { font-size:9px; color:var(--muted); }
+
+  /* STYLE SELECTOR */
+  .style-grid {
+    display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:8px;
+  }
+  .style-card {
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:12px; padding:10px 8px; text-align:center;
+    cursor:pointer; transition:all 0.2s;
+  }
+  .style-card:hover, .style-card.selected {
+    border-color:var(--gold); background:var(--gold-dim);
+  }
+  .style-icon { font-size:18px; margin-bottom:4px; }
+  .style-name { font-size:9px; color:var(--white); letter-spacing:0.08em; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ SPLASH ═══════════ -->
+<div id="splash" class="screen active">
+  <div class="logo-mark">
+    <svg viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="12" r="5" stroke="#c9a84c" stroke-width="1.2"/>
+      <path d="M6 28c0-5.523 4.477-10 10-10s10 4.477 10 10" stroke="#c9a84c" stroke-width="1.2" stroke-linecap="round"/>
+      <circle cx="16" cy="12" r="2" fill="#c9a84c" opacity="0.4"/>
+    </svg>
+  </div>
+  <h1 class="brand">MemoryAI</h1>
+  <p class="brand-sub">Tu historia, en vídeo</p>
+  <p class="splash-tagline">"Dime quién quieres recordar y lo haré eterno"</p>
+
+  <div class="chat-wrap">
+    <p class="chat-label">¿De quién quieres hacer un vídeo?</p>
+    <div class="chat-input-row">
+      <input type="text" id="splashInput" placeholder="Ej: hazme un vídeo de María..." autocomplete="off">
+      <button class="btn-send" onclick="handleSplashSend()">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2l6 6-6 6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="divider" style="max-width:420px; width:100%;">
+    <span>o conecta</span>
+  </div>
+
+  <button class="btn-google" onclick="connectGoogle()">
+    <svg width="18" height="18" viewBox="0 0 18 18"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+    Conectar con Google Fotos
+  </button>
+</div>
+
+<!-- ═══════════ CONNECTING ═══════════ -->
+<div id="connecting" class="screen">
+  <div class="connecting-ring"></div>
+  <p class="connecting-text">Conectando con Google Fotos</p>
+</div>
+
+<!-- ═══════════ MAIN APP ═══════════ -->
+<div id="app" class="screen">
+  <div class="topbar">
+    <div class="topbar-logo">Memory<span>AI</span></div>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:8px;height:8px;border-radius:50%;background:#4CAF50;box-shadow:0 0 8px #4CAF50;"></div>
+      <div class="user-avatar" id="userAvatar">👤</div>
+    </div>
+  </div>
+
+  <div class="chat-area" id="chatArea">
+    <!-- messages injected here -->
+  </div>
+
+  <div class="bottom-input">
+    <div class="bottom-row">
+      <input type="text" id="chatInput" placeholder="Escríbeme qué quieres crear..." autocomplete="off" onkeydown="if(event.key==='Enter')sendChat()">
+      <button class="btn-send" onclick="sendChat()">
+        <svg viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2l6 6-6 6" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- HIDDEN CANVAS for video generation -->
+<canvas id="slideCanvas" style="display:none;" width="540" height="960"></canvas>
+
+<script>
+// ═══════════════════════════════════════════════
+// APP STATE
+// ═══════════════════════════════════════════════
+const state = {
+  screen: 'splash',
+  connected: false,
+  userName: '',
+  initialQuery: '',
+  selectedFaces: [],
+  selectedPhotos: [],
+  selectedMusic: 'cinematic',
+  selectedStyle: 'fade',
+  videoBlob: null,
+  step: 'idle', // idle, faces, photos, music, style, generating, done
+  chatHistory: []
+};
+
+// Demo data
+const DEMO_FACES = [
+  { id:'f1', name:'María', emoji:'👩', color:'#ff9a9e', photos:12 },
+  { id:'f2', name:'Carlos', emoji:'👨', color:'#a18cd1', photos:8 },
+  { id:'f3', name:'Laura', emoji:'👧', color:'#ffecd2', photos:15 },
+  { id:'f4', name:'Papá', emoji:'👴', color:'#84fab0', photos:21 },
+  { id:'f5', name:'Mamá', emoji:'👵', color:'#f6d365', photos:19 },
+  { id:'f6', name:'Abuelo', emoji:'🧓', color:'#96e6a1', photos:6 },
+];
+
+const DEMO_PHOTOS = [
+  '🏖️','🎄','🎂','🎉','🌅','🌊','🎡','🏔️','🌺','🎭','🍾','🎈'
+];
+
+const MUSIC_OPTIONS = [
+  { id:'cinematic', name:'Cinemático', desc:'Épico y emocional', icon:'🎬' },
+  { id:'soft', name:'Suave', desc:'Piano y cuerdas', icon:'🎹' },
+  { id:'upbeat', name:'Alegre', desc:'Energético y positivo', icon:'🎸' },
+  { id:'nostalgic', name:'Nostálgico', desc:'Retro y emotivo', icon:'🎷' },
+];
+
+const STYLE_OPTIONS = [
+  { id:'fade', name:'Fade', icon:'✨' },
+  { id:'slide', name:'Slide', icon:'↔️' },
+  { id:'zoom', name:'Zoom', icon:'🔍' },
+  { id:'film', name:'Film', icon:'🎞️' },
+  { id:'polaroid', name:'Polaroid', icon:'📷' },
+  { id:'minimal', name:'Minimal', icon:'⬜' },
+];
+
+// ═══════════════════════════════════════════════
+// SCREEN MANAGEMENT
+// ═══════════════════════════════════════════════
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  state.screen = id;
+}
+
+// ═══════════════════════════════════════════════
+// SPLASH HANDLERS
+// ═══════════════════════════════════════════════
+function handleSplashSend() {
+  const val = document.getElementById('splashInput').value.trim();
+  if (!val) return;
+  state.initialQuery = val;
+  connectGoogle();
+}
+
+document.getElementById('splashInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleSplashSend();
+});
+
+function connectGoogle() {
+  showScreen('connecting');
+  // Simulate OAuth
+  setTimeout(() => {
+    state.connected = true;
+    showScreen('app');
+    initChat();
+  }, 2000);
+}
+
+// ═══════════════════════════════════════════════
+// CHAT ENGINE
+// ═══════════════════════════════════════════════
+function initChat() {
+  const area = document.getElementById('chatArea');
+  area.innerHTML = '';
+
+  if (state.initialQuery) {
+    addMessage('user', state.initialQuery);
+    setTimeout(() => processUserMessage(state.initialQuery), 600);
+  } else {
+    setTimeout(() => {
+      addMessage('ai', `Hola 👋 Soy tu asistente de vídeos.\n\n¿De quién quieres hacer un vídeo hoy?`);
+      state.step = 'idle';
+    }, 400);
+  }
+}
+
+function sendChat() {
+  const input = document.getElementById('chatInput');
+  const val = input.value.trim();
+  if (!val) return;
+  input.value = '';
+  addMessage('user', val);
+  setTimeout(() => processUserMessage(val), 500);
+}
+
+function addMessage(role, content, extra = null) {
+  const area = document.getElementById('chatArea');
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = role === 'ai' ? 'MemoryAI' : 'Tú';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.innerHTML = content.replace(/\n/g, '<br>');
+
+  msg.appendChild(label);
+  msg.appendChild(bubble);
+
+  if (extra) {
+    const extraEl = document.createElement('div');
+    extraEl.innerHTML = extra;
+    msg.appendChild(extraEl);
+  }
+
+  area.appendChild(msg);
+  area.scrollTop = area.scrollHeight;
+  return { msg, bubble };
+}
+
+function showTyping() {
+  const area = document.getElementById('chatArea');
+  const msg = document.createElement('div');
+  msg.className = 'msg ai';
+  msg.id = 'typingMsg';
+
+  const label = document.createElement('div');
+  label.className = 'msg-label';
+  label.textContent = 'MemoryAI';
+
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble';
+  bubble.innerHTML = '<div class="typing"><span></span><span></span><span></span></div>';
+
+  msg.appendChild(label);
+  msg.appendChild(bubble);
+  area.appendChild(msg);
+  area.scrollTop = area.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typingMsg');
+  if (t) t.remove();
+}
+
+// ═══════════════════════════════════════════════
+// CONVERSATION FLOW
+// ═══════════════════════════════════════════════
+function processUserMessage(text) {
+  showTyping();
+  const lower = text.toLowerCase();
+
+  setTimeout(() => {
+    removeTyping();
+
+    if (state.step === 'idle' || state.step === 'done') {
+      // Start new video flow
+      const personMatch = extractPerson(text);
+      if (personMatch) {
+        showFaceSelection(personMatch);
+      } else {
+        showFaceSelection(null);
+      }
+
+    } else if (state.step === 'faces_selected') {
+      // After face selection, ask for style
+      showStyleSelection();
+
+    } else if (state.step === 'style_selected') {
+      // After style, ask music
+      showMusicSelection();
+
+    } else if (state.step === 'music_selected') {
+      // Generate!
+      startGeneration();
+
+    } else if (state.step === 'generating') {
+      addMessage('ai', 'Estoy generando tu vídeo, un momento más... ⏳');
+
+    } else {
+      // Generic
+      addMessage('ai', `Entendido. ¿Quieres que empiece a generar el vídeo con lo que tenemos?`, `
+        <div class="chips">
+          <div class="chip" onclick="startGeneration()">✅ Sí, generar</div>
+          <div class="chip" onclick="showFaceSelection(null)">🔄 Cambiar persona</div>
+        </div>
+      `);
+    }
+  }, 900 + Math.random() * 400);
+}
+
+function extractPerson(text) {
+  const patterns = [
+    /(?:vídeo|video|fotos?) (?:de|con|para) ([a-záéíóúñ]+)/i,
+    /([a-záéíóúñ]+) (?:aparezca|salga|sale)/i,
+    /hazme (?:un )?(?:vídeo|video) (?:de )?([a-záéíóúñ]+)/i,
+  ];
+  for (const p of patterns) {
+    const m = text.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+// ─── FACE SELECTION ───
+function showFaceSelection(personHint) {
+  state.step = 'faces';
+
+  // Try to match hint with demo faces
+  let matchedFace = null;
+  if (personHint) {
+    matchedFace = DEMO_FACES.find(f => f.name.toLowerCase() === personHint.toLowerCase());
+  }
+
+  let introText = personHint
+    ? `He buscado "<strong>${personHint}</strong>" en tus Google Fotos.\n\nEsto es lo que encontré. Selecciona la persona (o personas) correcta:`
+    : `He encontrado <strong>${DEMO_FACES.length} personas etiquetadas</strong> en tus Google Fotos. ¿De quién quieres el vídeo?`;
+
+  // Build faces grid
+  const grid = DEMO_FACES.map(f => `
+    <div class="face-card ${matchedFace && matchedFace.id === f.id ? 'selected' : ''}" 
+         id="face-${f.id}" onclick="toggleFace('${f.id}')">
+      <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:36px;background:linear-gradient(135deg,${f.color}22,${f.color}11);">
+        ${f.emoji}
+      </div>
+      <div class="face-label">${f.name}<br><span style="opacity:0.6">${f.photos} fotos</span></div>
+      <div class="face-check">✓</div>
+    </div>
+  `).join('');
+
+  if (matchedFace) state.selectedFaces = [matchedFace.id];
+
+  addMessage('ai', introText, `
+    <div class="faces-grid" style="margin-top:10px;">${grid}</div>
+    <div class="demo-notice">
+      💡 En la versión final, estas serán las caras reales agrupadas por Google Fotos con tu etiqueta de nombre
+    </div>
+    <div class="chips" style="margin-top:10px;">
+      <div class="chip" onclick="confirmFaces()">✅ Confirmar selección</div>
+      <div class="chip" onclick="selectAllFaces()">👥 Seleccionar todos</div>
+    </div>
+  `);
+}
+
+function toggleFace(id) {
+  const card = document.getElementById(`face-${id}`);
+  const idx = state.selectedFaces.indexOf(id);
+  if (idx === -1) {
+    state.selectedFaces.push(id);
+    card.classList.add('selected');
+  } else {
+    state.selectedFaces.splice(idx, 1);
+    card.classList.remove('selected');
+  }
+}
+
+function selectAllFaces() {
+  DEMO_FACES.forEach(f => {
+    state.selectedFaces = DEMO_FACES.map(f => f.id);
+    document.getElementById(`face-${f.id}`).classList.add('selected');
+  });
+}
+
+function confirmFaces() {
+  if (state.selectedFaces.length === 0) {
+    addMessage('ai', 'Selecciona al menos una persona primero 😊');
+    return;
+  }
+  const names = state.selectedFaces.map(id => DEMO_FACES.find(f => f.id === id).name);
+  const totalPhotos = state.selectedFaces.reduce((acc, id) => acc + DEMO_FACES.find(f => f.id === id).photos, 0);
+
+  addMessage('user', `He seleccionado: ${names.join(', ')}`);
+  state.step = 'faces_selected';
+
+  setTimeout(() => {
+    showTyping();
+    setTimeout(() => {
+      removeTyping();
+      addMessage('ai', `Perfecto ✨ He encontrado <strong>${totalPhotos} fotos</strong> de ${names.join(' y ')}.\n\nAhora elige el estilo visual del vídeo:`);
+      showStyleSelection();
+    }, 800);
+  }, 300);
+}
+
+// ─── STYLE SELECTION ───
+function showStyleSelection() {
+  state.step = 'style';
+
+  const grid = STYLE_OPTIONS.map(s => `
+    <div class="style-card ${state.selectedStyle === s.id ? 'selected' : ''}" 
+         onclick="selectStyle('${s.id}')">
+      <div class="style-icon">${s.icon}</div>
+      <div class="style-name">${s.name}</div>
+    </div>
+  `).join('');
+
+  addMessage('ai', '🎨 ¿Qué estilo de transición quieres?', `
+    <div class="style-grid">${grid}</div>
+    <div class="chips" style="margin-top:10px;">
+      <div class="chip" onclick="confirmStyle()">→ Siguiente</div>
+    </div>
+  `);
+}
+
+function selectStyle(id) {
+  state.selectedStyle = id;
+  document.querySelectorAll('.style-card').forEach(c => c.classList.remove('selected'));
+  document.querySelectorAll('.style-card').forEach(c => {
+    if (c.querySelector('.style-name').textContent === STYLE_OPTIONS.find(s => s.id === id).name) {
+      c.classList.add('selected');
+    }
+  });
+}
+
+function confirmStyle() {
+  const style = STYLE_OPTIONS.find(s => s.id === state.selectedStyle);
+  addMessage('user', `Estilo: ${style.name} ${style.icon}`);
+  state.step = 'style_selected';
+  setTimeout(() => {
+    showTyping();
+    setTimeout(() => {
+      removeTyping();
+      showMusicSelection();
+    }, 700);
+  }, 200);
+}
+
+// ─── MUSIC SELECTION ───
+function showMusicSelection() {
+  state.step = 'music';
+
+  const grid = MUSIC_OPTIONS.map(m => `
+    <div class="music-card ${state.selectedMusic === m.id ? 'selected' : ''}"
+         onclick="selectMusic('${m.id}')">
+      <div class="music-icon">${m.icon}</div>
+      <div class="music-name">${m.name}</div>
+      <div class="music-desc">${m.desc}</div>
+    </div>
+  `).join('');
+
+  addMessage('ai', '🎵 ¿Qué ambiente musical quieres para el vídeo?', `
+    <div class="music-grid">${grid}</div>
+    <div class="chips" style="margin-top:10px;">
+      <div class="chip" onclick="confirmMusic()">🎬 Generar vídeo</div>
+    </div>
+  `);
+}
+
+function selectMusic(id) {
+  state.selectedMusic = id;
+  document.querySelectorAll('.music-card').forEach(c => c.classList.remove('selected'));
+  event.currentTarget.classList.add('selected');
+}
+
+function confirmMusic() {
+  const music = MUSIC_OPTIONS.find(m => m.id === state.selectedMusic);
+  addMessage('user', `Música: ${music.name} ${music.icon}`);
+  state.step = 'music_selected';
+  setTimeout(() => startGeneration(), 400);
+}
+
+// ─── GENERATION ───
+function startGeneration() {
+  state.step = 'generating';
+
+  const names = state.selectedFaces.map(id => DEMO_FACES.find(f => f.id === id)?.name || '').filter(Boolean);
+  const totalPhotos = state.selectedFaces.reduce((acc, id) => acc + (DEMO_FACES.find(f => f.id === id)?.photos || 0), 0);
+
+  showTyping();
+  setTimeout(() => {
+    removeTyping();
+
+    // Show progress message
+    const { msg } = addMessage('ai', `Generando tu vídeo de <strong>${names.join(' y ')}</strong>...`);
+
+    // Add progress bar
+    const progressEl = document.createElement('div');
+    progressEl.className = 'progress-wrap';
+    progressEl.innerHTML = `
+      <div class="progress-bar"><div class="progress-fill" id="pFill"></div></div>
+      <div class="progress-label" id="pLabel">Analizando fotos...</div>
+    `;
+    msg.querySelector('.msg-bubble').appendChild(progressEl);
+
+    document.getElementById('chatArea').scrollTop = 99999;
+
+    // Simulate progress
+    const steps = [
+      { pct:15, label:'Seleccionando las mejores fotos...' },
+      { pct:35, label:`Ordenando ${totalPhotos} imágenes...` },
+      { pct:55, label:'Aplicando transiciones...' },
+      { pct:75, label:'Añadiendo música...' },
+      { pct:90, label:'Renderizando vídeo...' },
+      { pct:100, label:'¡Listo! 🎉' },
+    ];
+
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i >= steps.length) {
+        clearInterval(interval);
+        setTimeout(() => showVideoResult(names, totalPhotos), 500);
+        return;
+      }
+      document.getElementById('pFill').style.width = steps[i].pct + '%';
+      document.getElementById('pLabel').textContent = steps[i].label;
+      i++;
+    }, 600);
+
+  }, 800);
+}
+
+function showVideoResult(names, photoCount) {
+  state.step = 'done';
+
+  const music = MUSIC_OPTIONS.find(m => m.id === state.selectedMusic);
+  const style = STYLE_OPTIONS.find(s => s.id === state.selectedStyle);
+
+  // Generate slideshow preview
+  addMessage('ai', `Tu vídeo está listo ✨\n\n<strong>${names.join(' & ')}</strong> · ${photoCount} fotos · Estilo ${style.name} · Música ${music.name}`, `
+    <div class="video-preview-card" style="margin-top:10px;">
+      <div class="video-canvas-wrap">
+        <canvas id="previewCanvas" width="540" height="400" style="width:100%;height:100%;object-fit:cover;"></canvas>
+      </div>
+      <div class="video-controls">
+        <button class="btn-play" onclick="togglePreview()">
+          <svg id="playIcon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M6.3 2.84l10.71 7.16-10.71 7.16V2.84z"/></svg>
+        </button>
+        <div class="video-info">
+          <div class="video-title">${names.join(' & ')} — Memories</div>
+          <div class="video-meta">${photoCount} fotos · ~${Math.round(photoCount * 1.5)}s · ${style.name}</div>
+        </div>
+        <button class="btn-download" onclick="downloadVideo()">↓ Guardar</button>
+      </div>
+    </div>
+    <div class="chips" style="margin-top:10px;">
+      <div class="chip" onclick="shareVideo()">📤 Compartir</div>
+      <div class="chip" onclick="newVideo()">+ Nuevo vídeo</div>
+    </div>
+  `);
+
+  document.getElementById('chatArea').scrollTop = 99999;
+
+  // Start canvas slideshow animation
+  setTimeout(() => startSlideshowPreview(names), 300);
+}
+
+// ═══════════════════════════════════════════════
+// CANVAS SLIDESHOW PREVIEW
+// ═══════════════════════════════════════════════
+let slideshowInterval = null;
+let slideshowPlaying = false;
+let currentSlide = 0;
+
+function startSlideshowPreview(names) {
+  const canvas = document.getElementById('previewCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const emojis = DEMO_PHOTOS;
+  const selectedFaceEmojis = state.selectedFaces.map(id => DEMO_FACES.find(f => f.id === id).emoji);
+  let frame = 0;
+  let slide = 0;
+  let transition = 0;
+
+  slideshowPlaying = true;
+
+  function draw() {
+    if (!slideshowPlaying) return;
+    const W = canvas.width, H = canvas.height;
+
+    // Background gradient per slide
+    const colors = ['#1a0a20','#0a1a20','#0a200a','#200a0a','#1a1a00','#0a0a1a'];
+    const bg = ctx.createLinearGradient(0,0,W,H);
+    const c1 = colors[slide % colors.length];
+    const c2 = colors[(slide+1) % colors.length];
+    bg.addColorStop(0, c1);
+    bg.addColorStop(1, c2);
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,W,H);
+
+    // Vignette
+    const vig = ctx.createRadialGradient(W/2,H/2,H*0.2,W/2,H/2,H*0.8);
+    vig.addColorStop(0,'transparent');
+    vig.addColorStop(1,'rgba(0,0,0,0.6)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0,0,W,H);
+
+    // Slide emoji (photo simulation)
+    const opacity = Math.sin(Math.PI * (frame % 90) / 90);
+    ctx.globalAlpha = 0.15 + opacity * 0.2;
+    ctx.font = `${80 + Math.sin(frame*0.02)*10}px serif`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(emojis[slide % emojis.length], W/2 + Math.sin(frame*0.01)*20, H/2 + Math.cos(frame*0.015)*15);
+
+    // Person emoji overlay
+    ctx.globalAlpha = 0.8;
+    ctx.font = '48px serif';
+    ctx.fillText(selectedFaceEmojis[slide % selectedFaceEmojis.length] || '👤', W/2, H/2 + 70);
+
+    ctx.globalAlpha = 1;
+
+    // Gold particles
+    for (let i = 0; i < 8; i++) {
+      const px = (Math.sin(frame*0.05 + i*0.8) * 0.4 + 0.5) * W;
+      const py = ((frame*0.003 + i*0.13) % 1) * H;
+      const a = Math.sin(frame*0.1 + i) * 0.5 + 0.5;
+      ctx.globalAlpha = a * 0.4;
+      ctx.fillStyle = '#c9a84c';
+      ctx.beginPath();
+      ctx.arc(px, py, 1.5, 0, Math.PI*2);
+      ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+
+    // Name watermark
+    ctx.font = '300 14px "DM Mono", monospace';
+    ctx.fillStyle = 'rgba(201,168,76,0.8)';
+    ctx.textAlign = 'center';
+    ctx.fillText(names.join(' & '), W/2, H - 20);
+
+    // Date
+    ctx.font = '300 10px monospace';
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillText('MemoryAI · 2025', W/2, H - 6);
+
+    frame++;
+    if (frame % 90 === 0) slide++;
+
+    requestAnimationFrame(draw);
+  }
+
+  draw();
+}
+
+function togglePreview() {
+  slideshowPlaying = !slideshowPlaying;
+  if (slideshowPlaying) startSlideshowPreview(state.selectedFaces.map(id => DEMO_FACES.find(f => f.id === id)?.name || ''));
+  const icon = document.getElementById('playIcon');
+  if (icon) {
+    icon.innerHTML = slideshowPlaying
+      ? '<rect x="5" y="3" width="4" height="14" fill="currentColor"/><rect x="11" y="3" width="4" height="14" fill="currentColor"/>'
+      : '<path d="M6.3 2.84l10.71 7.16-10.71 7.16V2.84z"/>';
+  }
+}
+
+function downloadVideo() {
+  addMessage('ai', '📥 En la versión final conectada a Google Fotos, aquí se descargaría el archivo .mp4 generado con tus fotos reales. El prototipo muestra la experiencia completa de usuario.');
+}
+
+function shareVideo() {
+  if (navigator.share) {
+    navigator.share({ title: 'Mi vídeo en MemoryAI', text: '¡Mira el vídeo que he creado con MemoryAI!' });
+  } else {
+    addMessage('ai', '📤 En la app móvil instalada, aquí se abrirá el menú nativo de compartir de tu dispositivo.');
+  }
+}
+
+function newVideo() {
+  state.selectedFaces = [];
+  state.selectedPhotos = [];
+  state.step = 'idle';
+  addMessage('ai', '¡Genial! ¿De quién quieres hacer el siguiente vídeo? 🎬');
+}
+
+// ═══════════════════════════════════════════════
+// SERVICE WORKER (PWA)
+// ═══════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
