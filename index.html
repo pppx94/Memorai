@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 
 <style>
   :root {
@@ -600,6 +601,71 @@
 
 <script>
 // ═══════════════════════════════════════════════
+// GOOGLE OAUTH CONFIG
+// ═══════════════════════════════════════════════
+const GOOGLE_CLIENT_ID = '392391626339-0jjoqjt6o674utjofp58trrb6eoe2qua.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/photoslibrary.readonly';
+let googleAccessToken = null;
+let tokenClient = null;
+
+function initGoogleAuth() {
+  if (typeof google === 'undefined') return;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: SCOPES,
+    callback: async (response) => {
+      if (response.error) {
+        console.error('OAuth error:', response.error);
+        showScreen('splash');
+        return;
+      }
+      googleAccessToken = response.access_token;
+      state.connected = true;
+      
+      // Get user info
+      try {
+        const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: `Bearer ${googleAccessToken}` }
+        });
+        const userInfo = await userRes.json();
+        state.userName = userInfo.name || 'Usuario';
+        document.getElementById('userAvatar').textContent = userInfo.name ? userInfo.name[0].toUpperCase() : '👤';
+      } catch(e) {}
+
+      showScreen('app');
+      initChat();
+    }
+  });
+}
+
+async function loadGooglePhotosAlbums() {
+  if (!googleAccessToken) return [];
+  try {
+    const res = await fetch('https://photoslibrary.googleapis.com/v1/albums?pageSize=50', {
+      headers: { Authorization: `Bearer ${googleAccessToken}` }
+    });
+    const data = await res.json();
+    return data.albums || [];
+  } catch(e) { return []; }
+}
+
+async function searchPhotosByAlbum(albumId) {
+  if (!googleAccessToken) return [];
+  try {
+    const res = await fetch('https://photoslibrary.googleapis.com/v1/mediaItems:search', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${googleAccessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ albumId, pageSize: 50 })
+    });
+    const data = await res.json();
+    return data.mediaItems || [];
+  } catch(e) { return []; }
+}
+
+// ═══════════════════════════════════════════════
 // APP STATE
 // ═══════════════════════════════════════════════
 const state = {
@@ -671,12 +737,26 @@ document.getElementById('splashInput').addEventListener('keydown', e => {
 
 function connectGoogle() {
   showScreen('connecting');
-  // Simulate OAuth
-  setTimeout(() => {
-    state.connected = true;
-    showScreen('app');
-    initChat();
-  }, 2000);
+  if (tokenClient) {
+    tokenClient.requestAccessToken();
+  } else {
+    // Fallback: retry after GSI loads
+    let attempts = 0;
+    const wait = setInterval(() => {
+      attempts++;
+      if (typeof google !== 'undefined') {
+        clearInterval(wait);
+        initGoogleAuth();
+        setTimeout(() => tokenClient.requestAccessToken(), 300);
+      } else if (attempts > 20) {
+        clearInterval(wait);
+        // Demo fallback
+        state.connected = true;
+        showScreen('app');
+        initChat();
+      }
+    }, 300);
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -817,21 +897,105 @@ function extractPerson(text) {
   return null;
 }
 
-// ─── FACE SELECTION ───
-function showFaceSelection(personHint) {
+async function showFaceSelection(personHint) {
   state.step = 'faces';
 
-  // Try to match hint with demo faces
+  // Try to load real Google Photos albums
+  let albums = [];
+  if (googleAccessToken) {
+    addMessage('ai', `Buscando en tus Google Fotos...`);
+    albums = await loadGooglePhotosAlbums();
+  }
+
+  if (albums.length > 0) {
+    // Use real albums as "people"
+    const filtered = personHint
+      ? albums.filter(a => a.title && a.title.toLowerCase().includes(personHint.toLowerCase()))
+      : albums.slice(0, 6);
+
+    const displayAlbums = filtered.length > 0 ? filtered : albums.slice(0, 6);
+
+    let introText = personHint && filtered.length > 0
+      ? `He encontrado álbumes con "<strong>${personHint}</strong>" en tus Google Fotos. Selecciona el correcto:`
+      : `He encontrado <strong>${albums.length} álbumes</strong> en tus Google Fotos. ¿De cuál quieres el vídeo?`;
+
+    const grid = displayAlbums.map((album, i) => `
+      <div class="face-card" id="album-${i}" onclick="toggleAlbum('${album.id}', ${i}, '${(album.title||'Álbum').replace(/'/g,"\\'")}')">
+        <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px;background:linear-gradient(135deg,#1a1a25,#111118);flex-direction:column;gap:4px;padding:6px;">
+          📁
+          <span style="font-size:9px;color:rgba(240,237,232,0.7);text-align:center;line-height:1.2;">${(album.title||'Álbum').substring(0,15)}</span>
+        </div>
+        <div class="face-label">${album.mediaItemsCount || '?'} fotos</div>
+        <div class="face-check">✓</div>
+      </div>
+    `).join('');
+
+    addMessage('ai', introText, `
+      <div class="faces-grid" style="margin-top:10px;">${grid}</div>
+      <div class="chips" style="margin-top:10px;">
+        <div class="chip" onclick="confirmFaces()">✅ Confirmar selección</div>
+      </div>
+    `);
+
+    state.realAlbums = displayAlbums;
+
+  } else {
+    // Demo fallback
+    showFaceSelectionDemo(personHint);
+  }
+}
+
+function toggleAlbum(albumId, idx, name) {
+  const card = document.getElementById(`album-${idx}`);
+  const existing = state.selectedFaces.findIndex(f => f.id === albumId);
+  if (existing === -1) {
+    state.selectedFaces.push({ id: albumId, name, photos: 0 });
+    card.classList.add('selected');
+  } else {
+    state.selectedFaces.splice(existing, 1);
+    card.classList.remove('selected');
+  }
+}
+
+async function confirmFaces() {
+  if (state.selectedFaces.length === 0) {
+    addMessage('ai', 'Selecciona al menos un álbum primero 😊');
+    return;
+  }
+  const names = state.selectedFaces.map(f => f.name);
+  addMessage('user', `He seleccionado: ${names.join(', ')}`);
+  state.step = 'faces_selected';
+
+  // Load photos from selected albums
+  if (googleAccessToken && state.realAlbums) {
+    showTyping();
+    let allPhotos = [];
+    for (const face of state.selectedFaces) {
+      const photos = await searchPhotosByAlbum(face.id);
+      allPhotos = allPhotos.concat(photos);
+      face.photos = photos.length;
+      face.photoItems = photos;
+    }
+    state.selectedPhotos = allPhotos;
+    removeTyping();
+    const total = allPhotos.length;
+    addMessage('ai', `✨ He encontrado <strong>${total} fotos</strong> de ${names.join(' y ')}.\n\nAhora elige el estilo visual del vídeo:`);
+  } else {
+    addMessage('ai', `Perfecto ✨ Ahora elige el estilo visual del vídeo:`);
+  }
+  showStyleSelection();
+}
+
+function showFaceSelectionDemo(personHint) {
   let matchedFace = null;
   if (personHint) {
     matchedFace = DEMO_FACES.find(f => f.name.toLowerCase() === personHint.toLowerCase());
   }
 
   let introText = personHint
-    ? `He buscado "<strong>${personHint}</strong>" en tus Google Fotos.\n\nEsto es lo que encontré. Selecciona la persona (o personas) correcta:`
-    : `He encontrado <strong>${DEMO_FACES.length} personas etiquetadas</strong> en tus Google Fotos. ¿De quién quieres el vídeo?`;
+    ? `He buscado "<strong>${personHint}</strong>" en tus Google Fotos.\n\nEsto es lo que encontré:`
+    : `He encontrado <strong>${DEMO_FACES.length} personas etiquetadas</strong>. ¿De quién quieres el vídeo?`;
 
-  // Build faces grid
   const grid = DEMO_FACES.map(f => `
     <div class="face-card ${matchedFace && matchedFace.id === f.id ? 'selected' : ''}" 
          id="face-${f.id}" onclick="toggleFace('${f.id}')">
@@ -843,55 +1007,31 @@ function showFaceSelection(personHint) {
     </div>
   `).join('');
 
-  if (matchedFace) state.selectedFaces = [matchedFace.id];
+  if (matchedFace) state.selectedFaces = [{ id: matchedFace.id, name: matchedFace.name, photos: matchedFace.photos }];
 
   addMessage('ai', introText, `
     <div class="faces-grid" style="margin-top:10px;">${grid}</div>
-    <div class="demo-notice">
-      💡 En la versión final, estas serán las caras reales agrupadas por Google Fotos con tu etiqueta de nombre
-    </div>
+    <div class="demo-notice">💡 Conecta con Google Fotos para ver tus álbumes reales</div>
     <div class="chips" style="margin-top:10px;">
-      <div class="chip" onclick="confirmFaces()">✅ Confirmar selección</div>
-      <div class="chip" onclick="selectAllFaces()">👥 Seleccionar todos</div>
+      <div class="chip" onclick="confirmFacesDemo()">✅ Confirmar selección</div>
     </div>
   `);
 }
 
-function toggleFace(id) {
-  const card = document.getElementById(`face-${id}`);
-  const idx = state.selectedFaces.indexOf(id);
-  if (idx === -1) {
-    state.selectedFaces.push(id);
-    card.classList.add('selected');
-  } else {
-    state.selectedFaces.splice(idx, 1);
-    card.classList.remove('selected');
-  }
-}
-
-function selectAllFaces() {
-  DEMO_FACES.forEach(f => {
-    state.selectedFaces = DEMO_FACES.map(f => f.id);
-    document.getElementById(`face-${f.id}`).classList.add('selected');
-  });
-}
-
-function confirmFaces() {
+function confirmFacesDemo() {
   if (state.selectedFaces.length === 0) {
     addMessage('ai', 'Selecciona al menos una persona primero 😊');
     return;
   }
-  const names = state.selectedFaces.map(id => DEMO_FACES.find(f => f.id === id).name);
-  const totalPhotos = state.selectedFaces.reduce((acc, id) => acc + DEMO_FACES.find(f => f.id === id).photos, 0);
-
+  const names = state.selectedFaces.map(f => f.name || DEMO_FACES.find(d => d.id === f)?.name || f);
+  const totalPhotos = state.selectedFaces.reduce((acc, f) => acc + (f.photos || DEMO_FACES.find(d => d.id === f)?.photos || 0), 0);
   addMessage('user', `He seleccionado: ${names.join(', ')}`);
   state.step = 'faces_selected';
-
   setTimeout(() => {
     showTyping();
     setTimeout(() => {
       removeTyping();
-      addMessage('ai', `Perfecto ✨ He encontrado <strong>${totalPhotos} fotos</strong> de ${names.join(' y ')}.\n\nAhora elige el estilo visual del vídeo:`);
+      addMessage('ai', `Perfecto ✨ He encontrado <strong>${totalPhotos} fotos</strong>.\n\nAhora elige el estilo visual del vídeo:`);
       showStyleSelection();
     }, 800);
   }, 300);
@@ -1177,6 +1317,11 @@ function newVideo() {
   state.step = 'idle';
   addMessage('ai', '¡Genial! ¿De quién quieres hacer el siguiente vídeo? 🎬');
 }
+
+// Init Google Auth when GSI loads
+window.addEventListener('load', () => {
+  setTimeout(initGoogleAuth, 1000);
+});
 
 // ═══════════════════════════════════════════════
 // SERVICE WORKER (PWA)
